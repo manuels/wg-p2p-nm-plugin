@@ -1,0 +1,33 @@
+[package]
+name = "wg-p2p-nm-plugin"
+version = "0.1.0"
+authors = ["Manuel Schölling <manuel.schoelling@gmx.de>"]
+build = "build.rs"
+
+[lib]
+crate-type = ["dylib"]
+path = "src/gui/lib.rs"
+
+[[bin]]
+name = "wg-p2p-vpn-service"
+path = "src/service/service.rs"
+
+[build-dependencies]
+cc = "*"
+
+[dependencies]
+gtk = "*"
+gio-sys = "*"
+libc = "*"
+docopt = "*"
+glib = "*"
+gdk = "*"
+tempfile = "2.2.0"
+gobject-sys = "*"
+#gdbus = { git = "https://github.com/manuels/gdbus-rs" }
+gdbus = { path = "../gdbus-rs" }
+
+[dependencies.glib-sys]
+version = "*"
+features = [ "dox" ]
+
