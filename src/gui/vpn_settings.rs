@@ -8,12 +8,13 @@ pub type NMConnection = libc::c_void;
 
 pub struct VpnSettings(*mut NMSettingVpn);
 
-pub const WG_P2P_VPN_LOCAL_NAME: &str = "local_name";
-pub const WG_P2P_VPN_LOCAL_PORT: &str = "local_port";
-pub const WG_P2P_VPN_ENDPOINT_ADDRESS: &str = "endpoint_address";
-pub const WG_P2P_VPN_ENDPOINT_METHOD: &str = "endpoint_method";
-pub const WG_P2P_VPN_REMOTE_PUBLIC_KEY: &str = "remote_public_key";
-pub const WG_P2P_VPN_LOCAL_PRIVATE_KEY: &str = "local_private_key";
+pub const WG_P2P_VPN_LOCAL_NAME: &str = "local-name";
+pub const WG_P2P_VPN_LOCAL_PORT: &str = "local-port";
+pub const WG_P2P_VPN_ENDPOINT_ADDRESS: &str = "endpoint-address";
+pub const WG_P2P_VPN_ENDPOINT_METHOD: &str = "endpoint-method";
+pub const WG_P2P_VPN_REMOTE_PUBLIC_KEY: &str = "remote-public-key";
+pub const WG_P2P_VPN_LOCAL_PRIVATE_KEY: &str = "local-private-key";
+pub const WG_P2P_VPN_INTERFACE_NAME: &str = "interface-name";
 
 extern {
     fn nm_connection_get_setting_vpn(connection: *mut NMConnection) -> *mut NMSettingVpn;
@@ -33,6 +34,10 @@ impl VpnSettings {
         };
 
         VpnSettings(ptr)
+    }
+
+    pub fn as_ptr(&self) -> *mut NMSettingVpn {
+        self.0
     }
 
     pub fn get_data_item(&self, key: &str) -> Option<String> {
@@ -81,7 +86,7 @@ impl VpnSettings {
         unsafe {
             nm_setting_vpn_add_secret(self.0, key.as_ptr(), value.as_ptr());
 
-            let r = nm_setting_set_secret_flags(self.0, key.as_ptr(), 0, 0 as *mut _);
+            let r = nm_setting_set_secret_flags(self.0, key.as_ptr(), 1, 0 as *mut _);
             assert!(r != 0);
         }
     }

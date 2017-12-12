@@ -8,6 +8,7 @@ use std::io::Write;
 use std::process::Command;
 use std::process::Stdio;
 
+use drunken_bishop;
 use bulletinboard;
 use vpn_settings;
 use vpn_settings::VpnSettings;
@@ -25,7 +26,10 @@ pub struct Editor {
     find_dlg: gtk::Dialog,
     remote_peer_name: gtk::Entry,
     remote_public_key: gtk::Entry,
+    interface_name: gtk::Entry,
     endpoint_address: gtk::Entry,
+    advanced_settings_btn: gtk::Button,
+    advanced_settings_dlg: gtk::Dialog,
     endpoint_method: gtk::RadioButton,
     local_name: gtk::Entry,
     local_private_key: gtk::Entry,
@@ -37,6 +41,9 @@ pub struct Editor {
     latest_search_term: Option<String>,
 }
 
+fn escape_markup(input: &str) -> String {
+    input.replace("&", "&amp;")
+}
 
 impl Editor {
     pub fn new(ptr: *mut u8, conn: *mut u8) -> Editor {
@@ -57,7 +64,11 @@ impl Editor {
         let hint = builder.get_object("hint").unwrap();
         let search_status = builder.get_object("search-status").unwrap();
         let generate = builder.get_object("generate").unwrap();
+        let advanced_settings_btn = builder.get_object("advanced-settings").unwrap();
+        let advanced_settings_dlg = builder.get_object("advanced-settings-dlg").unwrap();
+        let interface_name = builder.get_object("interface-name").unwrap();
         let main = builder.get_object("wg-p2p-vpn-vbox").unwrap();
+
 
         let mut editor = Editor {
             ptr,
@@ -70,12 +81,15 @@ impl Editor {
             local_private_key,
             local_public_key,
             local_name,
+            interface_name,
             remote_peer_name,
             remote_public_key,
             endpoint_address,
             endpoint_method,
             key_result_list,
             hint,
+            advanced_settings_btn,
+            advanced_settings_dlg,
             search_status,
             latest_search_term: None,
         };
@@ -121,6 +135,54 @@ impl Editor {
         self.endpoint_address.connect_changed(move |_| this.emit_changed());
 
         let this = self.clone();
+        self.advanced_settings_dlg.connect_response(move |_dlg, resp| {
+            if resp == gtk::ResponseType::Ok.into() {
+                this.emit_changed()
+            } else {
+                let settings = VpnSettings::new(conn as *mut _);
+                if let Some(iface) = settings.get_data_item(vpn_settings::WG_P2P_VPN_INTERFACE_NAME) {
+                    this.interface_name.set_text(&iface);
+                }
+            }
+            this.advanced_settings_dlg.set_visible(false);
+        });
+
+        let this = self.clone();
+        self.advanced_settings_btn.connect_clicked(move |_| {
+            this.advanced_settings_dlg.run();
+        });
+
+        let this = self.clone();
+        self.remote_public_key.connect_changed(move |_| {
+            let pos = gtk::EntryIconPosition::Secondary;
+            let key = this.remote_public_key.get_text().unwrap();
+            let key = glib::base64_decode(&key.trim());
+
+            if key.len() != 32 {
+                this.remote_public_key.set_icon_tooltip_markup(pos, "Public Key invalid!");
+            } else {
+                let text = drunken_bishop::drunken_bishop(&key, drunken_bishop::OPENSSL);
+                let text = format!("<tt>{}</tt>", escape_markup(text.trim()));
+                this.remote_public_key.set_icon_tooltip_markup(pos, &text[..]);
+            }
+        });
+
+        let this = self.clone();
+        self.local_public_key.connect_changed(move |_| {
+            let pos = gtk::EntryIconPosition::Secondary;
+            let key = this.local_public_key.get_text().unwrap();
+            let key = glib::base64_decode(&key.trim());
+
+            if key.len() != 32 {
+                this.local_public_key.set_icon_tooltip_markup(pos, "Public Key invalid!");
+            } else {
+                let text = drunken_bishop::drunken_bishop(&key, drunken_bishop::OPENSSL);
+                let text = format!("<tt>{}</tt>", escape_markup(text.trim()));
+                this.local_public_key.set_icon_tooltip_markup(pos, &text[..]);
+            }
+        });
+
+        let this = self.clone();
         self.local_private_key.connect_changed(move |_| {
             let key = this.local_private_key.get_text().unwrap();
 
@@ -135,14 +197,14 @@ impl Editor {
             };
 
             if let Some(mut stdin) = process.stdin {
-                stdin.write_all(key.as_bytes());
+                stdin.write_all(key.as_bytes()).expect("Error writing to wg's stdin");
             } else {
                 return;
             }
 
             if let Some(mut stdout) = process.stdout {
                 let mut key = String::new();
-                stdout.read_to_string(&mut key);
+                stdout.read_to_string(&mut key).expect("Error readling from wg's stdout");
                 this.local_public_key.set_text(key.trim());
             }
         });
@@ -171,7 +233,7 @@ impl Editor {
             }
 
             this.hint.set_visible(true);
-            this.search_status.set_text("Searching...");
+            this.search_status.set_text("Searching…");
             let mut this = this.clone();
             this.latest_search_term = Some(name.clone());
             bulletinboard::search_for_key(name.as_bytes(), move |res| this.on_keys_found(res));
@@ -187,7 +249,7 @@ impl Editor {
         //
         let settings = VpnSettings::new(conn as *mut _);
 
-        let local_private_key = settings.get_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
+        let local_private_key = settings.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
         self.local_private_key.set_text(local_private_key.as_ref().map_or("", |s| &**s));
 
         let local_name = settings.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_NAME);
@@ -195,11 +257,13 @@ impl Editor {
         let _endpoint_method = settings.get_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_METHOD);
         let endpoint_address = settings.get_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS);
         let remote_public_key = settings.get_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY);
+        let iface = settings.get_data_item(vpn_settings::WG_P2P_VPN_INTERFACE_NAME);
 
         self.local_name.set_text(local_name.as_ref().map_or("", |s| &**s));
         self.local_port.set_text(local_port.as_ref().map_or("", |s| &**s));
         self.endpoint_address.set_text(endpoint_address.as_ref().map_or("", |s| &**s));
         self.remote_public_key.set_text(remote_public_key.as_ref().map_or("", |s| &**s));
+        self.interface_name.set_text(iface.as_ref().map_or("wg0", |s| &**s));
     }
 
     fn emit_changed(&self) {
@@ -271,6 +335,7 @@ impl Editor {
         let local_name = self.local_name.get_text().unwrap_or("".to_string());
         let local_port = self.local_port.get_text().unwrap_or("".to_string());
         let endpoint_address = self.endpoint_address.get_text().unwrap_or("".to_string());
+        let interface_name = self.interface_name.get_text().unwrap_or("".to_string());
         /* TODO
         let endpoint_method = match self.endpoint_method.is_active() {
             true => "manual",
@@ -285,9 +350,10 @@ impl Editor {
         settings.add_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_METHOD, &endpoint_method);
         settings.add_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS, &endpoint_address);
         settings.add_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY, &remote_public_key);
+        settings.add_data_item(vpn_settings::WG_P2P_VPN_INTERFACE_NAME, &interface_name);
 
         let local_private_key = self.local_private_key.get_text().unwrap_or("".to_string());
-        settings.add_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY, &local_private_key);
+        settings.add_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY, &local_private_key);
 
         true
     }

@@ -23,7 +23,7 @@ wg_p2p_vpn_editor_plugin_interface_init (NMVpnEditorPluginInterface *iface_class
 G_DEFINE_TYPE_EXTENDED (WgP2pVpnEditorPlugin, wg_p2p_vpn_editor_plugin, G_TYPE_OBJECT, 0,
                         G_IMPLEMENT_INTERFACE (NM_TYPE_VPN_EDITOR_PLUGIN,
                                                wg_p2p_vpn_editor_plugin_interface_init))
-
+/*
 static NMVpnEditor *
 _call_editor_factory (gpointer factory,
                       NMVpnEditorPlugin *editor_plugin,
@@ -35,7 +35,7 @@ _call_editor_factory (gpointer factory,
 	return ((NMVpnEditorFactory) factory) (editor_plugin,
 	                                       connection,
 	                                       error);
-}
+}*/
 
 static NMVpnEditor *
 get_editor (NMVpnEditorPlugin *iface, NMConnection *connection, GError **error)

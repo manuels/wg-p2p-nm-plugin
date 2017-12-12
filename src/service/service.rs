@@ -1,9 +1,9 @@
 #![feature(catch_expr)]
 
 extern crate glib_sys;
+extern crate glib;
 extern crate libc;
 extern crate docopt;
-extern crate tempfile;
 
 const USAGE: &'static str = "WireGuard P2P NetworkManager Service.
 
@@ -15,112 +15,79 @@ Options:
   --bus-name <name>   D-Bus name [default: org.freedesktop.NetworkManager.wg-p2p-vpn].
 ";
 
-use std::path::PathBuf;
-use std::fs::File;
 use std::io::Result;
 use std::io::Write;
 use std::process::Command;
 use docopt::Docopt;
 
+mod variant;
+mod config;
 mod vpn_settings;
 mod ip_settings;
 
-#[repr(u8)]
-enum Bool { False = 0, True = 1 }
+use config::create_ipv4_config;
+use vpn_settings::VpnSettings;
+use ip_settings::IpV4Config;
+use ip_settings::IpConfigExt;
+
+type NMVpnServicePlugin = i8;
+struct VpnServicePlugin(*mut NMVpnServicePlugin);
+
+unsafe impl Send for VpnServicePlugin {}
+unsafe impl Sync for VpnServicePlugin {}
 
 #[link(name="service", kind="static")]
 #[link(name="gio-2.0")]
 #[link(name="gobject-2.0")]
 #[link(name="glib-2.0")]
 #[link(name="nm")]
-extern {
-    pub fn start(bus_name: *const i8) -> u8;
+extern "C" {
+    fn g_object_unref(ptr: *const i8);
+    fn nm_wg_p2p_vpn_plugin_new(bus_name: *const i8) -> *mut i8;
+    fn nm_vpn_service_plugin_set_ip4_config(plugin: *mut NMVpnServicePlugin,
+                                            new_config: *mut glib_sys::GVariant);
 }
 
-use vpn_settings::VpnSettings;
-use ip_settings::IpV4Config;
-use ip_settings::IpConfigExt;
-
-fn g_set_error(err: *mut *mut glib_sys::GError,
-               msg: String) {
-    let msg = std::ffi::CString::new(&msg[..]).unwrap();
-    unsafe {
-        glib_sys::g_set_error_literal(err, 0, 0, msg.as_ptr());
-    }
-}
-
-fn create_config_file(conn: *mut vpn_settings::NMConnection) -> Result<(PathBuf, File)> {
-    let (path, mut file) = if true {
-        let path = "/tmp/fooconf";
-        let mut file = std::fs::File::create(path.clone())?;
-        (path.into(), file)
-    } else {
-        let mut file = tempfile::NamedTempFile::new()?;
-        let path = file.path().to_path_buf();
-        let mut file:File = file.into();
-        (path, file)
-    };
-    // TODO: use correct temp file!
-
-    use std::os::unix::fs::PermissionsExt;
-    let mut permissions = file.metadata()?.permissions();
-    permissions.set_mode(0o600);
-    file.set_permissions(permissions)?;
-
+fn create_config_file(conn: *mut vpn_settings::NMConnection) -> Option<String> {
     let vpn = VpnSettings::new(conn);
 
-    let res = do catch {
-        let private_key = "MOEtPGhTswGxgxWBoG9o7zj8kfIedyy2scg9rxJqZks=";//vpn.get_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY)?;
-        let listen_port = vpn.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PORT)?;
-        let remote_public_key = vpn.get_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY)?;
-        let endpoint_addr = vpn.get_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS)?;
+    let private_key = vpn.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY)?;
+    let listen_port = vpn.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PORT)?;
+    let remote_public_key = vpn.get_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY)?;
+    let endpoint_addr = vpn.get_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS)?;
 
-        let interface = format!("[Interface]
+    let interface = format!("[Interface]
 PrivateKey = {}
 ListenPort = {}
 ", private_key, listen_port);
 
-        let peer = format!("[Peer]
+    let peer = format!("[Peer]
 PublicKey = {}
 Endpoint = {}
+AllowedIPs = 0.0.0.0/0, ::0/0
 ", remote_public_key, endpoint_addr);
 
-        Some((interface, peer))
-    };
-
-    if let Some((interface, peer)) = res {
-        file.write_all(interface.as_bytes())?;
-        file.write_all(peer.as_bytes())?;
-    } else {
-        let err = "Missing information for WireGuard device";
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, err));
-    }
-
-    file.flush()?;
-    return Ok((path.into(), file));
+    Some([interface, peer].concat())
 }
 
-/*
-static gboolean
-real_connect (NMVpnServicePlugin   *plugin,
-              NMConnection  *connection,
-              GError       **error)
-*/
 #[no_mangle]
-pub fn real_connect(_plugin: *mut libc::c_void,
+pub fn rust_connect(plugin: *mut NMVpnServicePlugin,
                conn:    *mut vpn_settings::NMConnection,
-               error:   *mut *mut glib_sys::GError) -> u8
+               error:   *mut *const glib_sys::GError) -> u8
 {
     assert!(!conn.is_null());
 
+    let settings = VpnSettings::new(conn as *mut _);
+    let iface = settings.get_data_item(vpn_settings::WG_P2P_VPN_INTERFACE_NAME);
+    let iface = iface.as_ref().map(|s| &**s).unwrap_or("wg0");
+
     let res: Result<()> = do catch {
+        let _ = Command::new("/usr/bin/ip")
+            .args(&["link", "del", "dev", iface])
+            .output();
+
         Command::new("/usr/bin/ip")
-            .arg("link")
-            .arg("add")
-            .arg("dev")
-            .arg("wg0")
-            .arg("type")
-            .arg("wireguard")
+            .args(&["link", "add", "dev", iface, "type", "wireguard"])
             .output()?;
 
         let ipv4 = IpV4Config::new(conn);
@@ -128,35 +95,52 @@ pub fn real_connect(_plugin: *mut libc::c_void,
         let ipv4_prefix = ipv4.get_prefix(0).map(|v| format!("/{}", v)).unwrap_or("".to_string());
 
         if let Some(addr) = ipv4_addr {
+            let addr = format!("{}{}", addr, ipv4_prefix);
             Command::new("/usr/bin/ip")
-                .arg("addr")
-                .arg("add")
-                .arg(format!("{}{}", addr, ipv4_prefix))
-                .arg("dev")
-                .arg("wg0")
+                .args(&["addr", "add", &addr, "dev", iface])
                 .output()?;
         }
 
-        let (path, conf_file) = create_config_file(conn).unwrap();
+        let conf = create_config_file(conn).unwrap();
 
-        Command::new("/usr/bin/wg")
-            .arg("setconf")
-            .arg("wg0")
-            .arg(path.clone())
+        let mut process = Command::new("/usr/bin/wg")
+            .stdin(std::process::Stdio::piped())
+            .args(&["setconf", iface, "/dev/stdin"])
+            .spawn()?;
+
+        if let Some(mut stdin) = process.stdin.as_mut() {
+            stdin.write(conf.as_bytes())?;
+        }
+
+        process.wait()?;
+
+        Command::new("/usr/bin/ip")
+            .args(&["link", "set", iface, "up"])
             .output()?;
-
-        drop(conf_file);
-        std::fs::remove_file(path)?;
 
         Ok(())
     };
 
     if let Err(_) = res {
-        g_set_error(error, "TODO".into());//e.to_string());
-        return Bool::False as _;
+        use glib::translate::ToGlibPtr;
+        unsafe {
+            // TODO: unsure
+            *error = glib::Error::new(glib::FileError::Failed, "TODO wg failed").to_glib_full();
+        };
+        return false as _;
     }
 
-    return Bool::True as _;
+    let plugin = VpnServicePlugin(plugin);
+    glib::source::timeout_add(0, move || {
+        let ptr = create_ipv4_config();
+
+        unsafe {
+        	nm_vpn_service_plugin_set_ip4_config(plugin.0 as *mut _, ptr);
+	    };
+    	glib::Continue(false)
+    });
+
+    true as _
 }
 
 fn main() {
@@ -166,9 +150,61 @@ fn main() {
     let bus_name = args.get_str("--bus-name");
     let bus_name = std::ffi::CString::new(bus_name).unwrap();
 
+    let plugin = unsafe {
+        nm_wg_p2p_vpn_plugin_new(bus_name.as_ptr())
+    };
+
+    glib::MainLoop::new(None, false).run();
+
     unsafe {
-        start(bus_name.as_ptr());
+        g_object_unref(plugin);
     }
 }
 
+/*
+    flags_dump = NLM_F_REQUEST | NLM_F_DUMP
+    flags_req = NLM_F_REQUEST | NLM_F_ACK
+    flags_create = flags_req | NLM_F_CREATE | NLM_F_EXCL
+
+     'add': (RTM_NEWLINK, flags_create),
+         msg = ifinfmsg()
+        # ifinfmsg fields
+        #
+        # ifi_family
+        # ifi_type
+        # ifi_index
+        # ifi_flags
+        # ifi_change
+
+            mask = 1                  # IFF_UP mask
+            if kwarg['state'].lower() == 'up':
+                flags = 1             # 0 (down) or 1 (up)
+            del kwarg['state']
+
+        msg['flags'] = flags
+        msg['change'] = mask
+
+    ret = self.nlm_request(msg,
+                           msg_type=command,
+                           msg_flags=msg_flags)
+
+////////////////////////////////////
+
+    let mut nlh = mnl::Nlmsg::new(&mut buf).unwrap();
+    *nlh.nlmsg_type = rtnetlink::RTM_NEWLINK;
+    *nlh.nlmsg_flags = netlink::NLM_F_REQUEST | netlink::NLM_F_CREATE | netlink::NLM_F_ACK;
+    *nlh.nlmsg_seq = seq;
+    let ifm = nlh.put_sized_header::<rtnetlink::Ifinfomsg>().unwrap();
+    ifm.ifi_family = 0; // no libc::AF_UNSPEC;
+    ifm.ifi_change = change;
+    ifm.ifi_flags = flags;
+
+    nlh.put_str(if_link::IFLA_IFNAME, &args[1]).unwrap();
+
+    let my_stdout = StdoutRawFd::Dummy;
+    nlh.fprintf(&my_stdout, size_of::<rtnetlink::Ifinfomsg>());
+
+    nl.send_nlmsg(&nlh)
+.unwrap_or_else(|errno| panic!("mnl_socket_sendto: {}", errno));
+*/
 

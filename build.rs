@@ -9,6 +9,7 @@ fn main() {
 //        .include(Path::new("/usr/include/libnm-gtk"))
 //        .include(Path::new("/usr/include/libnm-glib"))
         .include(Path::new("/usr/include/NetworkManager"))
+        .include(Path::new("/usr/include/libnm"))
 //        .include(Path::new("/usr/include/dbus-1.0"))
         .include(Path::new("/usr/include/gtk-3.0"))
 //        .include(Path::new("/usr/include/at-spi2-atk/2.0"))
@@ -30,6 +31,7 @@ fn main() {
 //        .include(Path::new("/usr/include/libpng16"))
         .include(Path::new("/usr/include/glib-2.0"))
         .include(Path::new("/usr/lib/x86_64-linux-gnu/glib-2.0/include"))
+        .include(Path::new("/usr/include/dbus-1.0/"))
         .file("src/gui/wg-p2p-vpn-editor-plugin.c")
         .file("src/gui/wg-p2p-vpn-editor.c")
        .compile("wg-p2p-vpn-editor");
@@ -40,6 +42,7 @@ fn main() {
 //        .include(Path::new("/usr/include/libnm-gtk"))
 //        .include(Path::new("/usr/include/libnm-glib"))
         .include(Path::new("/usr/include/NetworkManager"))
+        .include(Path::new("/usr/include/libnm"))
 //        .include(Path::new("/usr/include/dbus-1.0"))
         .include(Path::new("/usr/include/gtk-3.0"))
 //        .include(Path::new("/usr/include/at-spi2-atk/2.0"))

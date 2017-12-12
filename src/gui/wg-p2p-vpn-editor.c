@@ -1,7 +1,10 @@
 #include "shared/nm-default.h"
-#include <libnm/nm-connection.h>
-#include <libnm/nm-vpn-editor.h>
-#include <libnm/nm-vpn-editor-plugin.h>
+//#include "/usr/include/libnm-glib/nm-remote-settings.h"
+//#include "/usr/include/libnm-glib/libnm_glib.h"
+//#include <libnm/nm-connection.h>
+//#include <libnm/nm-vpn-editor.h>
+//#include <libnm/nm-vpn-editor-plugin.h>
+#include <libnm/NetworkManager.h>
 
 #include "wg-p2p-vpn-editor.h"
 
@@ -30,7 +33,7 @@ static void
 destructor_dispose (GObject *object)
 {
 	g_message("dispose");
-	WgP2pVpnEditor *plugin = WG_P2P_VPN_EDITOR (object);
+	//WgP2pVpnEditor *plugin = WG_P2P_VPN_EDITOR (object);
 	G_OBJECT_CLASS (wg_p2p_vpn_editor_plugin_widget_parent_class)->dispose (object);
 }
 
@@ -62,6 +65,8 @@ wg_p2p_vpn_editor_plugin_widget_interface_init (NMVpnEditorInterface *iface_clas
 	iface_class->get_widget = get_widget;
 	iface_class->update_connection = update_connection;
 }
+
+extern void init(WgP2pVpnEditor *, NMConnection   *);
 
 NMVpnEditor *wg_p2p_vpn_editor_new (NMConnection *connection, GError **error) {
 	WgP2pVpnEditor *object = g_object_new (WG_P2P_VPN_TYPE_EDITOR, NULL);
