@@ -8,7 +8,6 @@ compile:
 
 TMPDIR := $(shell mktemp -d)
 package: compile
-	echo $(TMPDIR)
 	mkdir -p $(TMPDIR)/etc/dbus-1/system.d/
 	mkdir -p $(TMPDIR)/usr/lib/NetworkManager/VPN/
 	mkdir -p $(TMPDIR)/usr/lib/x86_64-linux-gnu/NetworkManager/
@@ -21,10 +20,19 @@ package: compile
 	cp ./target/release/libwg_p2p_nm_plugin.so $(TMPDIR)/usr/lib/x86_64-linux-gnu/NetworkManager/
 	cp ./src/gui/wg-p2p-vpn-editor.ui $(TMPDIR)/usr/share/gnome-vpn-properties/wg-p2p
 
-	fpm -s dir -t deb -n $(NAME) -v $(VERSION) \
-		-p wg-p2p-nm_VERSION_ARCH.deb \
-		-d 'libgtk-3-0' \
-		-d 'libnm0' \
-		$(TMPDIR)
+	for PKG in deb rpm; do \
+	        fpm -s dir -t $$PKG -n $(NAME) -v $(VERSION) \
+			-p wg-p2p-nm_VERSION_ARCH.$$PKG \
+			-d 'libgtk-3-0' \
+			-d 'libnm0' \
+			$(TMPDIR); \
+	done
 
 	rm -R $(TMPDIR)
+
+clean:
+	rm wg-p2p-nm*.deb
+	rm wg-p2p-nm*.rpm
+
+.PHONY: clean
+
