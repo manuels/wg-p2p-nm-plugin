@@ -53,7 +53,7 @@ impl VpnSettings {
     }
 
     pub fn add_data_item(&mut self, key: &str, value: &str) {
-        if key.len() == 0 || value.len() == 0 {
+        if key.is_empty() || value.is_empty() {
             return;
         }
 
@@ -77,7 +77,7 @@ impl VpnSettings {
     }
 
     pub fn add_secret_item(&mut self, key: &str, value: &str) {
-        if key.len() == 0 || value.len() == 0 {
+        if key.is_empty() || value.is_empty() {
             return;
         }
 

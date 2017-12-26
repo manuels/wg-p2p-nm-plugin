@@ -22,6 +22,9 @@
 #ifndef __NM_DEFAULT_H__
 #define __NM_DEFAULT_H__
 
+#define NM_AVAILABLE_IN_1_10_2 G_UNAVAILABLE(1,10.2)
+
+
 /* makefiles define NETWORKMANAGER_COMPILATION for compiling NetworkManager.
  * Depending on which parts are compiled, different values are set. */
 #define NM_NETWORKMANAGER_COMPILATION_DEFAULT             0x0001
@@ -49,7 +52,7 @@
 /* for internal compilation we don't want the deprecation macros
  * to be in effect. Define the widest range of versions to effectively
  * disable deprecation checks */
-#define NM_VERSION_MAX_ALLOWED   NM_VERSION_NEXT_STABLE
+#define NM_VERSION_MAX_ALLOWED   NM_VERSION_1_12
 #define NM_VERSION_MIN_REQUIRED  NM_VERSION_0_9_8
 
 #ifndef NM_MORE_ASSERTS
@@ -174,7 +177,6 @@ _nm_g_return_if_fail_warning (const char *log_domain,
 #endif
 
 /*****************************************************************************/
-
 #include "nm-utils/nm-macros-internal.h"
 #include "nm-utils/nm-shared-utils.h"
 

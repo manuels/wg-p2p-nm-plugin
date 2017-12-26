@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.20.1 -->
+<!-- Generated with glade 3.20.2 -->
 <interface>
   <requires lib="gtk+" version="3.4"/>
   <object class="GtkMessageDialog" id="advanced-settings-dlg">
@@ -322,8 +322,8 @@ Enter the name of the remote peer here and I will try to find it.</property>
                 </child>
                 <child>
                   <object class="GtkEntry" id="local-name">
-                    <property name="visible">True</property>
                     <property name="can_focus">True</property>
+                    <property name="no_show_all">True</property>
                     <property name="hexpand">True</property>
                   </object>
                   <packing>
@@ -347,8 +347,8 @@ Enter the name of the remote peer here and I will try to find it.</property>
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="no_show_all">True</property>
                     <property name="label" translatable="yes">Publish Local Private Key as:</property>
                     <property name="xalign">0</property>
                   </object>
@@ -383,8 +383,8 @@ Enter the name of the remote peer here and I will try to find it.</property>
                 </child>
                 <child>
                   <object class="GtkSwitch">
-                    <property name="visible">True</property>
                     <property name="can_focus">True</property>
+                    <property name="no_show_all">True</property>
                   </object>
                   <packing>
                     <property name="left_attach">2</property>
@@ -486,8 +486,8 @@ Enter the name of the remote peer here and I will try to find it.</property>
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="no_show_all">True</property>
                     <property name="label" translatable="yes">Endpoint Method:</property>
                     <property name="xalign">0</property>
                   </object>
@@ -498,8 +498,8 @@ Enter the name of the remote peer here and I will try to find it.</property>
                 </child>
                 <child>
                   <object class="GtkBox">
-                    <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="no_show_all">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkRadioButton" id="radiobutton1">
@@ -541,9 +541,9 @@ Enter the name of the remote peer here and I will try to find it.</property>
                 <child>
                   <object class="GtkButton" id="find">
                     <property name="label">Find Key…</property>
-                    <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
+                    <property name="no_show_all">True</property>
                     <property name="halign">end</property>
                   </object>
                   <packing>

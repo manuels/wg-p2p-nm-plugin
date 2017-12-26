@@ -27,6 +27,8 @@ gobject-sys = "*"
 #gdbus = { git = "https://github.com/manuels/gdbus-rs" }
 gdbus = { path = "../gdbus-rs" }
 drunken_bishop = "*"
+crslmnl = "*"
+time = "*"
 
 [dependencies.glib-sys]
 version = "*"

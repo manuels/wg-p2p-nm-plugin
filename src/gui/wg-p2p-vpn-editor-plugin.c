@@ -13,8 +13,8 @@ enum {
 	PROP_SERVICE
 };
 
-#define WG_P2P_VPN_PLUGIN_NAME _("WireGuard Peer-to-Peer VPN")
-#define WG_P2P_VPN_PLUGIN_DESC _("")
+#define WG_P2P_VPN_PLUGIN_NAME _("WireGuard VPN")
+#define WG_P2P_VPN_PLUGIN_DESC _("www.wireguard.com")
 #define NM_VPN_SERVICE_TYPE_WG_P2PVPN "org.freedesktop.NetworkManager.wg-p2p-vpn"
 
 static void
@@ -84,6 +84,7 @@ get_property (GObject *object, guint prop_id,
 		break;
 	case PROP_DESC:
     	g_message("PROP_DESC");
+    	g_message("PROP_DESC %s", WG_P2P_VPN_PLUGIN_DESC);
 		g_value_set_string (value, WG_P2P_VPN_PLUGIN_DESC);
 		break;
 	case PROP_SERVICE:

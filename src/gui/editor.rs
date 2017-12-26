@@ -16,6 +16,8 @@ use vpn_settings::NMConnection;
 
 use gtk::prelude::*;
 
+const UI_PATH: &str = "/usr/share/gnome-vpn-properties/wg-p2p/wg-p2p-vpn-editor.ui";
+
 #[derive(Clone)]
 pub struct Editor {
     ptr: *mut u8,
@@ -48,7 +50,7 @@ fn escape_markup(input: &str) -> String {
 impl Editor {
     pub fn new(ptr: *mut u8, conn: *mut u8) -> Editor {
         let builder = gtk::Builder::new();
-        builder.add_from_file("/home/manuel/Projects/wg-p2p-nm-plugin-rs/src/gui/wg-p2p-vpn-editor.ui").unwrap();
+        builder.add_from_file(UI_PATH).unwrap();
 
         let find_btn = builder.get_object("find").unwrap();
         let find_dlg = builder.get_object("find-dialog").unwrap();
@@ -68,7 +70,6 @@ impl Editor {
         let advanced_settings_dlg = builder.get_object("advanced-settings-dlg").unwrap();
         let interface_name = builder.get_object("interface-name").unwrap();
         let main = builder.get_object("wg-p2p-vpn-vbox").unwrap();
-
 
         let mut editor = Editor {
             ptr,
@@ -159,7 +160,7 @@ impl Editor {
             let key = glib::base64_decode(&key.trim());
 
             if key.len() != 32 {
-                this.remote_public_key.set_icon_tooltip_markup(pos, "Public Key invalid!");
+                this.remote_public_key.set_icon_tooltip_markup(pos, "Invalid Public Key!");
             } else {
                 let text = drunken_bishop::drunken_bishop(&key, drunken_bishop::OPENSSL);
                 let text = format!("<tt>{}</tt>", escape_markup(text.trim()));
@@ -174,7 +175,7 @@ impl Editor {
             let key = glib::base64_decode(&key.trim());
 
             if key.len() != 32 {
-                this.local_public_key.set_icon_tooltip_markup(pos, "Public Key invalid!");
+                this.local_public_key.set_icon_tooltip_markup(pos, "Invalid Private Key!");
             } else {
                 let text = drunken_bishop::drunken_bishop(&key, drunken_bishop::OPENSSL);
                 let text = format!("<tt>{}</tt>", escape_markup(text.trim()));

@@ -7,6 +7,9 @@ extern gboolean rust_connect(NMVpnServicePlugin  *plugin,
                              NMConnection        *connection,
                              GError             **error);
 
+extern gboolean rust_disconnect(NMVpnServicePlugin *plugin,
+                                GError **err);
+
 #define NM_DBUS_SERVICE_WG_P2P_VPN "org.freedesktop.NetworkManager.wg-p2p-vpn"
 
 /*********************************************************************/
@@ -67,8 +70,6 @@ nm_wg_p2p_vpn_plugin_new (const char *bus_name)
 	                                             NM_VPN_SERVICE_PLUGIN_DBUS_SERVICE_NAME, bus_name,
 	                                             NM_VPN_SERVICE_PLUGIN_DBUS_WATCH_PEER, FALSE, //!gl.debug,
 	                                             NULL);
-
-
 	if (plugin) {
 		g_signal_connect (G_OBJECT (plugin), "state-changed", G_CALLBACK (plugin_state_changed), NULL);
 	} else {
@@ -89,7 +90,7 @@ static gboolean
 real_disconnect (NMVpnServicePlugin *plugin,
                  GError **err)
 {
-    return FALSE;
+    return rust_disconnect(plugin, err);
 }
 
 static gboolean
@@ -107,7 +108,7 @@ real_need_secrets (NMVpnServicePlugin *plugin,
                    const char **setting_name,
                    GError **error)
 {
-    return FALSE;
+    return FALSE; // TODO Will crash if TRUE ->  Why?
 }
 
 static gboolean

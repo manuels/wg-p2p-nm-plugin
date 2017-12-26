@@ -1,14 +1,11 @@
 [VPN Connection]
 name=wg-p2p-vpn
 service=org.freedesktop.NetworkManager.wg-p2p-vpn
-program=/home/manuel/Projects/wg-p2p-nm-plugin-rs/target/debug/wg-p2p-vpn-service
-#program=/bin/bash
+program=/usr/lib/NetworkManager/wg-p2p-vpn-service
 supports-multiple-connections=false
 
 [libnm]
-#plugin=/home/manuel/Projects/wg-p2p-nm-plugin/builddir/libwg-p2p-vpn-editor-plugin.so
-#plugin=/home/manuel/Projects/wg-p2p-nm-plugin-rs/target/debug/libwg_p2p_nm_plugin.so
-plugin=/home/manuel/Projects/wg-p2p-nm-plugin-rs/target/debug/libwg_p2p_nm_plugin.so
+plugin=/usr/lib/x86_64-linux-gnu/NetworkManager/libwg_p2p_nm_plugin.so
 
 [GNOME]
 auth-dialog=/bin/bash
