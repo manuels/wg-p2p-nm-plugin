@@ -1,5 +1,6 @@
 use gtk;
 use glib;
+use gtk_sys;
 use gobject_sys;
 
 use std;
@@ -15,8 +16,32 @@ use vpn_settings::VpnSettings;
 use vpn_settings::NMConnection;
 
 use gtk::prelude::*;
+use glib::translate::ToGlibPtr;
 
 const UI_PATH: &str = "/usr/share/gnome-vpn-properties/wg-p2p/wg-p2p-vpn-editor.ui";
+
+#[allow(dead_code)]
+#[repr(C)]
+enum NMSettingSecretFlags {
+    None,
+    AgentOwned,
+    NotSaved,
+    NotRequired,
+}
+
+extern "C" {
+    fn nma_utils_setup_password_storage(passwd_entry: *const gtk_sys::GtkEntry,
+                                        initial_flags: NMSettingSecretFlags ,
+                                        setting: *mut i8,
+                                        password_flags_name: *const i8,
+                                        with_not_required: bool,
+                                        ask_mode: bool);
+    fn nm_setting_set_secret_flags(setting: *mut i8,
+                                   secret_name: *const i8,
+                                   flags: NMSettingSecretFlags,
+                                   error: *mut *mut i8) -> bool;
+    fn nma_utils_menu_to_secret_flags(entry: *const gtk_sys::GtkEntry) -> NMSettingSecretFlags;
+}
 
 #[derive(Clone)]
 pub struct Editor {
@@ -250,7 +275,18 @@ impl Editor {
         //
         let settings = VpnSettings::new(conn as *mut _);
 
-        let local_private_key = settings.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
+        unsafe {
+            let s = vpn_settings::nm_connection_get_setting_vpn(conn as *mut _);
+            let key = std::ffi::CString::new(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY).unwrap();
+            nma_utils_setup_password_storage(self.local_private_key.to_glib_none().0,
+                                             NMSettingSecretFlags::None,
+                                             s as *mut _,
+                                             key.as_ptr() as *const _,
+                                             false, /*with_not_required*/
+                                             false /*ask_mode*/);
+        };
+
+        let local_private_key = settings.get_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
         self.local_private_key.set_text(local_private_key.as_ref().map_or("", |s| &**s));
 
         let local_name = settings.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_NAME);
@@ -259,12 +295,14 @@ impl Editor {
         let endpoint_address = settings.get_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS);
         let remote_public_key = settings.get_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY);
         let iface = settings.get_data_item(vpn_settings::WG_P2P_VPN_INTERFACE_NAME);
+        let local_public_key = settings.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PUBLIC_KEY);
 
         self.local_name.set_text(local_name.as_ref().map_or("", |s| &**s));
         self.local_port.set_text(local_port.as_ref().map_or("", |s| &**s));
         self.endpoint_address.set_text(endpoint_address.as_ref().map_or("", |s| &**s));
         self.remote_public_key.set_text(remote_public_key.as_ref().map_or("", |s| &**s));
         self.interface_name.set_text(iface.as_ref().map_or("wg0", |s| &**s));
+        self.local_public_key.set_text(local_public_key.as_ref().map_or("", |s| &**s));
     }
 
     fn emit_changed(&self) {
@@ -337,6 +375,7 @@ impl Editor {
         let local_port = self.local_port.get_text().unwrap_or("".to_string());
         let endpoint_address = self.endpoint_address.get_text().unwrap_or("".to_string());
         let interface_name = self.interface_name.get_text().unwrap_or("".to_string());
+        let local_public_key = self.local_public_key.get_text().unwrap_or("".to_string());
         /* TODO
         let endpoint_method = match self.endpoint_method.is_active() {
             true => "manual",
@@ -352,9 +391,18 @@ impl Editor {
         settings.add_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS, &endpoint_address);
         settings.add_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY, &remote_public_key);
         settings.add_data_item(vpn_settings::WG_P2P_VPN_INTERFACE_NAME, &interface_name);
+        settings.add_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PUBLIC_KEY, &local_public_key);
 
         let local_private_key = self.local_private_key.get_text().unwrap_or("".to_string());
-        settings.add_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY, &local_private_key);
+        settings.add_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY, &local_private_key);
+
+        unsafe {
+        	let key = vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY;
+        	let key = std::ffi::CString::new(key).unwrap();
+            let s = vpn_settings::nm_connection_get_setting_vpn(conn as *mut _);
+        	let pw_flags = nma_utils_menu_to_secret_flags(self.local_private_key.to_glib_none().0);
+            nm_setting_set_secret_flags(s as *mut _, key.as_ptr(), pw_flags, std::ptr::null_mut());
+        };
 
         true
     }

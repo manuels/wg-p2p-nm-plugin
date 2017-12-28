@@ -71,7 +71,7 @@ extern "C" {
 fn create_config_file(conn: *mut vpn_settings::NMConnection) -> Result<String> {
     let vpn = VpnSettings::new(conn);
 
-    let private_key = vpn.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
+    let private_key = vpn.get_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
     let listen_port = vpn.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PORT);
     let remote_public_key = vpn.get_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY);
     let endpoint_addr = vpn.get_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS);
@@ -128,6 +128,7 @@ pub fn rust_disconnect(plugin: *mut NMVpnServicePlugin,
 
 #[no_mangle]
 pub fn rust_connect(plugin: *mut NMVpnServicePlugin,
+               ptr:    *mut *mut Link,
                conn:    *mut vpn_settings::NMConnection,
                error:   *mut *const glib_sys::GError) -> u8
 {
@@ -173,6 +174,10 @@ pub fn rust_connect(plugin: *mut NMVpnServicePlugin,
         Ok(dev) => {
             let name = dev.name.to_string();
             unsafe { LINK = Some(dev) };
+            /*let dev = Box::new(dev);
+            unsafe {
+                *ptr = Box::into_raw(dev);
+            }*/
             let plugin = VpnServicePlugin(plugin);
             glib::source::timeout_add(0, move || {
                 let cfg = create_config(&name);

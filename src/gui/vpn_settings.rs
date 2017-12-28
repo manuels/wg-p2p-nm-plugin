@@ -15,9 +15,10 @@ pub const WG_P2P_VPN_ENDPOINT_METHOD: &str = "endpoint-method";
 pub const WG_P2P_VPN_REMOTE_PUBLIC_KEY: &str = "remote-public-key";
 pub const WG_P2P_VPN_LOCAL_PRIVATE_KEY: &str = "local-private-key";
 pub const WG_P2P_VPN_INTERFACE_NAME: &str = "interface-name";
+pub const WG_P2P_VPN_LOCAL_PUBLIC_KEY: &str = "local-public-key";
 
 extern {
-    fn nm_connection_get_setting_vpn(connection: *mut NMConnection) -> *mut NMSettingVpn;
+    pub fn nm_connection_get_setting_vpn(connection: *mut NMConnection) -> *mut NMSettingVpn;
     fn nm_setting_vpn_get_data_item(settings: *mut NMSettingVpn, key: *const i8) -> *const i8;
     fn nm_setting_vpn_add_data_item(settings: *mut NMSettingVpn, key: *const i8, value: *const i8) -> *const i8;
     fn nm_setting_vpn_get_secret(settings: *mut NMSettingVpn, key: *const i8) -> *const i8;

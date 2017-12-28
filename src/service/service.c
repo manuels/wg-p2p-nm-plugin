@@ -3,13 +3,6 @@
 #include "shared/nm-default.h"
 #include <libnm/NetworkManager.h>
 
-extern gboolean rust_connect(NMVpnServicePlugin  *plugin,
-                             NMConnection        *connection,
-                             GError             **error);
-
-extern gboolean rust_disconnect(NMVpnServicePlugin *plugin,
-                                GError **err);
-
 #define NM_DBUS_SERVICE_WG_P2P_VPN "org.freedesktop.NetworkManager.wg-p2p-vpn"
 
 /*********************************************************************/
@@ -21,6 +14,7 @@ extern gboolean rust_disconnect(NMVpnServicePlugin *plugin,
 #define NM_WG_P2P_VPN_PLUGIN_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), NM_TYPE_WG_P2P_VPN_PLUGIN, NMWgP2pVpnPluginClass))
 
 typedef struct {
+    int *rust;
 	NMVpnServicePlugin parent;
 } NMWgP2pVpnPlugin;
 
@@ -28,6 +22,13 @@ typedef struct {
 	NMVpnServicePluginClass parent;
 } NMWgP2pVpnPluginClass;
 
+extern gboolean rust_connect(NMVpnServicePlugin  *plugin,
+                             int                **rust,
+                             NMConnection        *connection,
+                             GError             **error);
+
+extern gboolean rust_disconnect(NMVpnServicePlugin *plugin,
+                                GError **err);
 
 GType nm_wg_p2p_vpn_plugin_get_type (void);
 
@@ -94,12 +95,20 @@ real_disconnect (NMVpnServicePlugin *plugin,
 }
 
 static gboolean
-real_connect_interactive (NMVpnServicePlugin   *plugin,
+real_connect_interactive (NMWgP2pVpnPlugin   *plugin,
                           NMConnection  *connection,
                           GVariant      *details,
                           GError       **error)
 {
-	return rust_connect(plugin, connection, error);
+	return rust_connect(plugin, &(plugin->rust), connection, error);
+}
+
+static gboolean
+real_connect (NMWgP2pVpnPlugin   *plugin,
+              NMConnection  *connection,
+              GError       **error)
+{
+	return rust_connect(plugin, &(plugin->rust), connection, error);
 }
 
 static gboolean
@@ -128,7 +137,7 @@ nm_wg_p2p_vpn_plugin_class_init(NMWgP2pVpnPluginClass *plugin_class)
 	object_class->dispose = dispose;
 
 	// virtual methods
-	parent_class->connect      = rust_connect;
+	parent_class->connect      = real_connect;
 	parent_class->connect_interactive = real_connect_interactive;
 	parent_class->need_secrets = real_need_secrets;
 	parent_class->disconnect   = real_disconnect;
