@@ -8,7 +8,9 @@ supports-multiple-connections=false
 plugin=/usr/lib/x86_64-linux-gnu/NetworkManager/libwg_p2p_nm_plugin.so
 
 [GNOME]
-auth-dialog=/bin/bash
-properties=/tmp/libnm-openvpn-properties
+#auth-dialog=/home/manuel/Projects/wg-p2p-nm-plugin-rs/authy
+auth-dialog=/usr/bin/bash
+properties=libnm-openvpn-properties
 supports-external-ui-mode=true
 supports-hints=true
+

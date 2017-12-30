@@ -22,7 +22,6 @@ use std::io::Result;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Write;
-use std::process::Command;
 use docopt::Docopt;
 
 mod tests;
@@ -68,33 +67,6 @@ extern "C" {
                                             new_config: *mut glib_sys::GVariant);
 }
 
-fn create_config_file(conn: *mut vpn_settings::NMConnection) -> Result<String> {
-    let vpn = VpnSettings::new(conn);
-
-    let private_key = vpn.get_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
-    let listen_port = vpn.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PORT);
-    let remote_public_key = vpn.get_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY);
-    let endpoint_addr = vpn.get_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS);
-
-    let private_key = private_key.ok_or(Error::new(ErrorKind::Other, "Private Key missing!"))?;
-    let listen_port = listen_port.ok_or(Error::new(ErrorKind::Other, "ListenPort missing!"))?;
-    let remote_public_key = remote_public_key.ok_or(Error::new(ErrorKind::Other, "Remote Public Key missing!"))?;
-    let endpoint_addr = endpoint_addr.ok_or(Error::new(ErrorKind::Other, "Endpoint missing!"))?;
-
-    let interface = format!("[Interface]
-PrivateKey = {}
-ListenPort = {}
-", private_key, listen_port);
-
-    let peer = format!("[Peer]
-PublicKey = {}
-Endpoint = {}
-AllowedIPs = 0.0.0.0/0, ::0/0
-", remote_public_key, endpoint_addr);
-
-    Ok([interface, peer].concat())
-}
-
 fn apply_device_config<T:IpConfigExt>(link: &mut Link, ip: &T) -> Result<()> {
     for i in 0..ip.get_num_addresses() {
         let ip_addr = ip.get_address(i).unwrap_or(None);
@@ -119,8 +91,8 @@ fn apply_device_config<T:IpConfigExt>(link: &mut Link, ip: &T) -> Result<()> {
 }
 
 #[no_mangle]
-pub fn rust_disconnect(plugin: *mut NMVpnServicePlugin,
-                       error:  *mut *const glib_sys::GError) -> u8
+pub fn rust_disconnect(_plugin: *mut NMVpnServicePlugin,
+                       _error:  *mut *const glib_sys::GError) -> u8
 {
     let link = unsafe { LINK.take() }.unwrap();
     link.delete().is_ok() as _
@@ -128,9 +100,9 @@ pub fn rust_disconnect(plugin: *mut NMVpnServicePlugin,
 
 #[no_mangle]
 pub fn rust_connect(plugin: *mut NMVpnServicePlugin,
-               ptr:    *mut *mut Link,
-               conn:    *mut vpn_settings::NMConnection,
-               error:   *mut *const glib_sys::GError) -> u8
+                    _ptr:   *mut *mut Link,
+                    conn:   *mut vpn_settings::NMConnection,
+                    error:  *mut *const glib_sys::GError) -> u8
 {
     assert!(!conn.is_null());
 
@@ -144,20 +116,37 @@ pub fn rust_connect(plugin: *mut NMVpnServicePlugin,
         apply_device_config(&mut link, &Ipv4Config::new(conn))?;
         apply_device_config(&mut link, &Ipv6Config::new(conn))?;
 
-        let mut process = Command::new("/usr/bin/wg")
-            .stdin(std::process::Stdio::piped())
-            .args(&["setconf", iface, "/dev/stdin"])
-            .spawn()?;
+        let vpn = VpnSettings::new(conn);
 
-        if let Some(mut stdin) = process.stdin.as_mut() {
-            let conf = create_config_file(conn)?;
-            stdin.write_all(conf.as_bytes())?;
-        } else {
-            Err(Error::new(ErrorKind::Other, "Opening /usr/bin/wg stdin failed!"))?
-        }
+        let private_key = vpn.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
+        let listen_port = vpn.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PORT);
+        let remote_public_key = vpn.get_data_item(vpn_settings::WG_P2P_VPN_REMOTE_PUBLIC_KEY);
+        let endpoint_addr = vpn.get_data_item(vpn_settings::WG_P2P_VPN_ENDPOINT_ADDRESS);
 
-        process.wait()?;
+        let private_key = private_key.ok_or(Error::new(ErrorKind::Other, "Private Key missing!"))?;
+        let listen_port = listen_port.ok_or(Error::new(ErrorKind::Other, "ListenPort missing!"))?;
+        let remote_public_key = remote_public_key.ok_or(Error::new(ErrorKind::Other, "Remote Public Key missing!"))?;
+        let endpoint_addr = endpoint_addr.ok_or(Error::new(ErrorKind::Other, "Endpoint missing!"))?;
 
+        let _private_key = glib::base64_decode(&private_key.trim());
+        let _remote_public_key = glib::base64_decode(&remote_public_key.trim());
+        let listen_port = listen_port.parse::<u16>().unwrap();
+
+        let mut private_key: [u8; 32] = [0; 32];
+        private_key.copy_from_slice(&_private_key[..32]);
+
+        let mut remote_public_key: [u8; 32] = [0; 32];
+        remote_public_key.copy_from_slice(&_remote_public_key[..32]);
+
+        let peers = [ link::Peer {
+            public_key: remote_public_key,
+            endpoint: Some(endpoint_addr.parse().unwrap()),
+            psk: None,
+            keepalive: None,
+            allowed_ips: vec![("0.0.0.0".parse().unwrap(), 24)],
+        } ];
+
+        link.set_wireguard(private_key, listen_port, None, &peers)?;
         link.set_up(true)?;
 
         Ok(link)
@@ -174,10 +163,7 @@ pub fn rust_connect(plugin: *mut NMVpnServicePlugin,
         Ok(dev) => {
             let name = dev.name.to_string();
             unsafe { LINK = Some(dev) };
-            /*let dev = Box::new(dev);
-            unsafe {
-                *ptr = Box::into_raw(dev);
-            }*/
+
             let plugin = VpnServicePlugin(plugin);
             glib::source::timeout_add(0, move || {
                 let cfg = create_config(&name);

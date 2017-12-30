@@ -100,7 +100,8 @@ real_connect_interactive (NMWgP2pVpnPlugin   *plugin,
                           GVariant      *details,
                           GError       **error)
 {
-	return rust_connect(plugin, &(plugin->rust), connection, error);
+	return rust_connect(NM_VPN_SERVICE_PLUGIN(plugin),
+                        &(plugin->rust), connection, error);
 }
 
 static gboolean
@@ -108,7 +109,8 @@ real_connect (NMWgP2pVpnPlugin   *plugin,
               NMConnection  *connection,
               GError       **error)
 {
-	return rust_connect(plugin, &(plugin->rust), connection, error);
+	return rust_connect(NM_VPN_SERVICE_PLUGIN(plugin),
+                        &(plugin->rust), connection, error);
 }
 
 static gboolean
@@ -117,7 +119,8 @@ real_need_secrets (NMVpnServicePlugin *plugin,
                    const char **setting_name,
                    GError **error)
 {
-    return FALSE; // TODO Will crash if TRUE ->  Why?
+    //*setting_name = NM_SETTING_VPN_SETTING_NAME;
+    return FALSE;
 }
 
 static gboolean

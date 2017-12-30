@@ -20,7 +20,8 @@ package: compile
 	cp ./target/release/libwg_p2p_nm_plugin.so $(TMPDIR)/usr/lib/x86_64-linux-gnu/NetworkManager/
 	cp ./src/gui/wg-p2p-vpn-editor.ui $(TMPDIR)/usr/share/gnome-vpn-properties/wg-p2p/
 
-	for PKG in deb rpm; do \
+#	for PKG in deb rpm; do
+	for PKG in deb; do \
 	        fpm -s dir -t $$PKG -n $(NAME) -v $(VERSION) \
 			-p wg-p2p-nm_VERSION_ARCH.$$PKG \
 			-d 'libgtk-3-0' \

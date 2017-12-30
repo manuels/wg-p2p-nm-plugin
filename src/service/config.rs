@@ -24,7 +24,7 @@ pub fn create_ipv4_config() -> *mut glib_sys::GVariant {
 }
 
 pub fn create_ipv6_config() -> *mut glib_sys::GVariant {
-    let mut builder = VariantBuilder::new("a{sv}").unwrap();
+    let builder = VariantBuilder::new("a{sv}").unwrap();
 
     //let addr: Ipv4Addr = "10.0.0.1".parse().unwrap();
     //let addr: u32 = addr.into();

@@ -286,7 +286,7 @@ impl Editor {
                                              false /*ask_mode*/);
         };
 
-        let local_private_key = settings.get_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
+        let local_private_key = settings.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY);
         self.local_private_key.set_text(local_private_key.as_ref().map_or("", |s| &**s));
 
         let local_name = settings.get_data_item(vpn_settings::WG_P2P_VPN_LOCAL_NAME);
@@ -394,7 +394,7 @@ impl Editor {
         settings.add_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PUBLIC_KEY, &local_public_key);
 
         let local_private_key = self.local_private_key.get_text().unwrap_or("".to_string());
-        settings.add_secret_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY, &local_private_key);
+        settings.add_data_item(vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY, &local_private_key);
 
         unsafe {
         	let key = vpn_settings::WG_P2P_VPN_LOCAL_PRIVATE_KEY;
