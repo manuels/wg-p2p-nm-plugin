@@ -208,10 +208,10 @@ impl Link {
                 for s in segments.iter_mut() {
                     *s = s.to_be();
                 }
-//                let addr = unsafe { transmute::<[u16;8], libc::in6_addr>(segments) };
+
                 let addr: libc::in6_addr = unsafe { transmute(segments) };
                 nlh.put(attr, &addr)
-                },
+            },
         }
     }
 
@@ -390,7 +390,21 @@ impl Link {
                         };
                         nlh.put(WgPeerAttr::Endpoint as _, &addr)?;
                     },
-                    _ => unimplemented!()
+                    SocketAddr::V6(addr) => {
+                        let mut segments = addr.ip().segments();
+                        for s in segments.iter_mut() {
+                            *s = s.to_be();
+                        }
+
+                        let addr = libc::sockaddr_in6 {
+                            sin6_family: libc::AF_INET6 as _,
+                            sin6_port: addr.port().to_be(),
+                            sin6_addr: unsafe { transmute(segments) },
+                            sin6_flowinfo: 0,
+                            sin6_scope_id: 0,
+                        };
+                        nlh.put(WgPeerAttr::Endpoint as _, &addr)?;
+                    },
                 };
             }
 

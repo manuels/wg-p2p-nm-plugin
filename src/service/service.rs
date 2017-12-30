@@ -21,7 +21,6 @@ Options:
 use std::io::Result;
 use std::io::Error;
 use std::io::ErrorKind;
-use std::io::Write;
 use docopt::Docopt;
 
 mod tests;
