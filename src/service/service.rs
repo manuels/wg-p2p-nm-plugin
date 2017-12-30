@@ -24,6 +24,7 @@ use std::io::ErrorKind;
 use docopt::Docopt;
 
 mod tests;
+mod netlink;
 mod link;
 mod variant;
 mod config;

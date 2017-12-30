@@ -7,7 +7,8 @@ use std::mem::transmute;
 
 use libc;
 use mnl;
-use time;
+
+use netlink as nl;
 
 use mnl::linux::netlink;
 use mnl::linux::rtnetlink;
@@ -97,17 +98,10 @@ pub struct Link {
 
 impl Link {
     pub fn create(typ: &str, name: Option<String>) -> Result<Link, io::Error> {
-        let nl = mnl::Socket::open(netlink::Family::ROUTE)?;
-        nl.bind(0, mnl::SOCKET_AUTOPID)?;
-        let portid = nl.portid();
+        let mut nl = nl::Socket::open(netlink::Family::ROUTE)?;
 
-        let mut buf = vec![0u8; mnl::SOCKET_BUFFER_SIZE()];
-        let seq = time::now().to_timespec().sec as u32;
-
-        let mut nlh = mnl::Nlmsg::new(&mut buf)?;
-        *nlh.nlmsg_type = rtnetlink::RTM_NEWLINK;
-        *nlh.nlmsg_flags = netlink::NLM_F_REQUEST | netlink::NLM_F_ACK | netlink::NLM_F_ATOMIC | netlink::NLM_F_CREATE | netlink::NLM_F_EXCL | netlink::NLM_F_DUMP;
-        *nlh.nlmsg_seq = seq;
+        let flags = netlink::NLM_F_REQUEST | netlink::NLM_F_ACK | netlink::NLM_F_ATOMIC | netlink::NLM_F_CREATE | netlink::NLM_F_EXCL | netlink::NLM_F_DUMP;
+        let mut nlh = nl.new_msg(rtnetlink::RTM_NEWLINK, flags)?;
 
         let _ifm = nlh.put_sized_header::<rtnetlink::Ifinfomsg>()?;
         if let Some(ref name) = name {
@@ -121,57 +115,28 @@ impl Link {
         assert_eq!(mnl::linux::if_link::IFLA_LINKINFO, 18);
     	nlh.put(mnl::linux::if_link::IFLA_LINKINFO, &something_something_wireguard)?;
 
-        nl.send_nlmsg(&nlh)?;
-
-        let nrecv = nl.recvfrom(&mut buf)?;
-        mnl::cb_run::<u8>(&buf[0..nrecv], seq, portid, None, &mut 0)?;
-
+        nl.send_recv(nlh, None, &mut 0)?;
         nl.close()?;
 
         Ok(Link { name: name.unwrap() })
     }
 
     pub fn delete(self) -> Result<(), io::Error> {
-        let nl = mnl::Socket::open(netlink::Family::ROUTE)?;
-        nl.bind(0, mnl::SOCKET_AUTOPID)?;
-        let portid = nl.portid();
+        let mut nl = nl::Socket::open(netlink::Family::ROUTE)?;
 
-        let mut buf = vec![0u8; mnl::SOCKET_BUFFER_SIZE()];
-        let seq = time::now().to_timespec().sec as u32;
-
-        let mut nlh = mnl::Nlmsg::new(&mut buf)?;
-        *nlh.nlmsg_type = rtnetlink::RTM_DELLINK;
-        *nlh.nlmsg_flags = netlink::NLM_F_REQUEST | netlink::NLM_F_ACK | netlink::NLM_F_ATOMIC | netlink::NLM_F_CREATE | netlink::NLM_F_EXCL | netlink::NLM_F_DUMP;
-        *nlh.nlmsg_seq = seq;
+        let flags = netlink::NLM_F_REQUEST | netlink::NLM_F_ACK | netlink::NLM_F_ATOMIC | netlink::NLM_F_CREATE | netlink::NLM_F_EXCL | netlink::NLM_F_DUMP;
+        let mut nlh = nl.new_msg(rtnetlink::RTM_NEWLINK, flags)?;
 
         let _ifm = nlh.put_sized_header::<rtnetlink::Ifinfomsg>()?;
     	nlh.put_str(mnl::linux::if_link::IFLA_IFNAME, &self.name)?;
 
-        nl.send_nlmsg(&nlh)?;
-
-        let nrecv = nl.recvfrom(&mut buf)?;
-        mnl::cb_run::<u8>(&buf[0..nrecv], seq, portid, None, &mut 0)?;
-
+        nl.send_recv(nlh, None, &mut 0)?;
         nl.close()
     }
 
     pub fn add_route(&self, dst: IpAddr, prefix: u8, gateway: Option<IpAddr>) -> Result<(),io::Error> {
-        let nl = mnl::Socket::open(netlink::Family::ROUTE)?;
-        nl.bind(0, mnl::SOCKET_AUTOPID)?;
-        let portid = nl.portid();
-
-        let iface = unsafe {
-            let name = CString::new(&self.name[..]).unwrap();
-            libc::if_nametoindex(name.as_ptr())
-        };
-
-        let mut buf = vec![0u8; mnl::SOCKET_BUFFER_SIZE()];
-        let seq = time::now().to_timespec().sec as u32;
-
-        let mut nlh = mnl::Nlmsg::new(&mut buf)?;
-        *nlh.nlmsg_type = rtnetlink::RTM_NEWROUTE;
-        *nlh.nlmsg_flags = netlink::NLM_F_REQUEST | netlink::NLM_F_CREATE | netlink::NLM_F_ACK;
-        *nlh.nlmsg_seq = seq;
+        let mut nl = nl::Socket::open(netlink::Family::ROUTE)?;
+        let mut nlh = nl.new_msg(rtnetlink::RTM_NEWROUTE, netlink::NLM_F_REQUEST | netlink::NLM_F_CREATE | netlink::NLM_F_ACK)?;
 
         let rtm = nlh.put_sized_header::<rtnetlink::Rtmsg>()?;
         rtm.rtm_family = if dst.is_ipv6() { libc::AF_INET6 } else { libc::AF_INET } as u8;
@@ -185,15 +150,18 @@ impl Link {
         rtm.rtm_flags = 0;
 
         Self::msg_put_addr(&mut nlh, rtnetlink::RTA_DST, dst)?;
+
+        let iface = unsafe {
+            let name = CString::new(&self.name[..]).unwrap();
+            libc::if_nametoindex(name.as_ptr())
+        };
         nlh.put_u32(rtnetlink::RTA_OIF, iface)?;
+
         if let Some(gw) = gateway {
             Self::msg_put_addr(&mut nlh, rtnetlink::RTA_GATEWAY, gw)?;
         }
-        nl.send_nlmsg(&nlh)?;
 
-        let nrecv = nl.recvfrom(&mut buf)?;
-        mnl::cb_run::<u8>(&buf[0..nrecv], seq, portid, None, &mut 0)?;
-
+        nl.send_recv(nlh, None, &mut 0)?;
         nl.close()
     }
 
@@ -216,23 +184,14 @@ impl Link {
     }
 
     pub fn add_addr(&self, addr: IpAddr, prefix: u8) -> Result<(),io::Error> {
-        let nl = mnl::Socket::open(netlink::Family::ROUTE)?;
-        nl.bind(0, mnl::SOCKET_AUTOPID)?;
-        let portid = nl.portid();
+        let mut nl = nl::Socket::open(netlink::Family::ROUTE)?;
+        let mut nlh = nl.new_msg(rtnetlink::RTM_NEWADDR, netlink::NLM_F_REQUEST | netlink::NLM_F_CREATE |
+            netlink::NLM_F_EXCL | netlink::NLM_F_ACK)?;
 
         let iface = unsafe {
             let name = CString::new(&self.name[..]).unwrap();
             libc::if_nametoindex(name.as_ptr())
         };
-
-        let mut buf = vec![0u8; mnl::SOCKET_BUFFER_SIZE()];
-        let seq = time::now().to_timespec().sec as u32;
-
-        let mut nlh = mnl::Nlmsg::new(&mut buf)?;
-        *nlh.nlmsg_type = rtnetlink::RTM_NEWADDR;
-        *nlh.nlmsg_flags = netlink::NLM_F_REQUEST | netlink::NLM_F_CREATE |
-            netlink::NLM_F_EXCL | netlink::NLM_F_ACK;
-        *nlh.nlmsg_seq = seq;
 
         let ifm = nlh.put_sized_header::<if_addr::Ifaddrmsg>()?;
         ifm.ifa_family = if addr.is_ipv6() { libc::AF_INET6 } else { libc::AF_INET } as u8;
@@ -247,31 +206,18 @@ impl Link {
             Self::msg_put_addr(&mut nlh, if_addr::IFA_LOCAL, addr)?;
         }
 
-        nl.send_nlmsg(&nlh)?;
-
-        let nrecv = nl.recvfrom(&mut buf)?;
-        mnl::cb_run::<u8>(&buf[0..nrecv], seq, portid, None, &mut 0)?;
-
+        nl.send_recv(nlh, None, &mut 0)?;
         nl.close()
     }
 
     pub fn set_up(&self, up: bool) -> Result<(),io::Error> {
-        let nl = mnl::Socket::open(netlink::Family::ROUTE)?;
-        nl.bind(0, mnl::SOCKET_AUTOPID)?;
-        let portid = nl.portid();
+        let mut nl = nl::Socket::open(netlink::Family::ROUTE)?;
+        let mut nlh = nl.new_msg(rtnetlink::RTM_NEWLINK, netlink::NLM_F_REQUEST | netlink::NLM_F_ACK)?;
 
         let iface = unsafe {
             let name = CString::new(&self.name[..]).unwrap();
             libc::if_nametoindex(name.as_ptr())
         };
-
-        let mut buf = vec![0u8; mnl::SOCKET_BUFFER_SIZE()];
-        let seq = time::now().to_timespec().sec as u32;
-
-        let mut nlh = mnl::Nlmsg::new(&mut buf)?;
-        *nlh.nlmsg_type = rtnetlink::RTM_NEWLINK;
-        *nlh.nlmsg_flags = netlink::NLM_F_REQUEST | netlink::NLM_F_ACK;
-        *nlh.nlmsg_seq = seq;
 
         let ifm = nlh.put_sized_header::<rtnetlink::Ifinfomsg>()?;
         ifm.ifi_family = libc::AF_UNSPEC as u8;
@@ -283,36 +229,19 @@ impl Link {
             ifm.ifi_flags &= !mnl::linux::ifh::IFF_UP;
         }
 
-        nl.send_nlmsg(&nlh)?;
-
-        let nrecv = nl.recvfrom(&mut buf)?;
-        mnl::cb_run::<u8>(&buf[0..nrecv], seq, portid, None, &mut 0)?;
-
+        nl.send_recv(nlh, None, &mut 0)?;
         nl.close()
     }
 
     fn get_family_id(family_name: &str) -> Result<u16, io::Error> {
-        let nl = mnl::Socket::open(netlink::Family::GENERIC)?;
-        nl.bind(0, mnl::SOCKET_AUTOPID)?;
-        let portid = nl.portid();
-
-        let mut buf = vec![0u8; mnl::SOCKET_BUFFER_SIZE()];
-        let seq = time::now().to_timespec().sec as u32;
-
-        let mut nlh = mnl::Nlmsg::new(&mut buf)?;
-        *nlh.nlmsg_type = genetlink::GENL_ID_CTRL;
-        *nlh.nlmsg_flags = netlink::NLM_F_REQUEST | netlink::NLM_F_ACK;
-        *nlh.nlmsg_seq = seq;
+        let mut nl = nl::Socket::open(netlink::Family::GENERIC)?;
+        let mut nlh = nl.new_msg(genetlink::GENL_ID_CTRL, netlink::NLM_F_REQUEST | netlink::NLM_F_ACK)?;
 
         let genl = nlh.put_sized_header::<Genlmsghdr>()?;
     	genl.cmd = genetlink::CTRL_CMD_GETFAMILY;
         genl.version = 1;
 
         nlh.put_strz(genetlink::CTRL_ATTR_FAMILY_NAME, family_name)?;
-
-        nl.send_nlmsg(&nlh)?;
-
-        let nrecv = nl.recvfrom(&mut buf)?;
 
         let get_family_id = |nlh: mnl::Nlmsg, family: &mut Option<u16>| {
             let get_family_id_attr = |attr: &mnl::Attr, family: &mut Option<u16>| {
@@ -332,7 +261,8 @@ impl Link {
         };
 
         let mut family: Option<u16> = None;
-        mnl::cb_run(&buf[0..nrecv], seq, portid, Some(get_family_id), &mut family)?;
+        nl.send_recv(nlh, Some(get_family_id), &mut family)?;
+        nl.close()?;
 
         family.ok_or(io::Error::from_raw_os_error(libc::EOPNOTSUPP))
     }
@@ -344,17 +274,9 @@ impl Link {
                          peer_list: &[Peer])
         -> Result<(), io::Error>
     {
-        let nl = mnl::Socket::open(netlink::Family::GENERIC)?;
-        nl.bind(0, mnl::SOCKET_AUTOPID)?;
-        let portid = nl.portid();
-
-        let mut buf = vec![0u8; mnl::SOCKET_BUFFER_SIZE()];
-        let seq = time::now().to_timespec().sec as u32;
-
-        let mut nlh = mnl::Nlmsg::new(&mut buf)?;
-        *nlh.nlmsg_type = Self::get_family_id(WG_GENL_NAME)?;
-        *nlh.nlmsg_flags = netlink::NLM_F_REQUEST | netlink::NLM_F_ACK;
-        *nlh.nlmsg_seq = seq;
+        let typ = Self::get_family_id(WG_GENL_NAME)?;
+        let mut nl = nl::Socket::open(netlink::Family::GENERIC)?;
+        let mut nlh = nl.new_msg(typ, netlink::NLM_F_REQUEST | netlink::NLM_F_ACK)?;
 
         let genl = nlh.put_sized_header::<Genlmsghdr>()?;
     	genl.cmd = WgCmd::SetDevice as _;
@@ -426,11 +348,8 @@ impl Link {
 
         nlh.nest_end(&mut nest);
 
-        nl.send_nlmsg(&nlh)?;
-        let nrecv = nl.recvfrom(&mut buf)?;
-        mnl::cb_run::<u8>(&buf[0..nrecv], seq, portid, None, &mut 0)?;
-
-        Ok(())
+        nl.send_recv(nlh, None, &mut 0)?;
+        nl.close()
     }
 }
 
